@@ -1,0 +1,792 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Serpent — Boss Battle</title>
+<meta name="description" content="The Serpent — an interactive boss-battle script. Face the Serpent, choose your stance, and decide how Max carries himself.">
+<style>
+  :root{
+    --bg:#0b0812;
+    --bg2:#0f0a1a;
+    --panel:#16101f;
+    --panel2:#1d1530;
+    --line:#2c2140;
+    --ink:#e7e0f2;
+    --muted:#9086a8;
+    --faint:#6a6082;
+    --serpent:#c15bff;
+    --serpent-deep:#7e3fd6;
+    --max:#5fd3ff;
+    --baruch:#ffb454;
+    --geyser:#c76bff;
+    --ember:#ff9a5a;
+    --weak:#63f0a8;
+    --danger:#ff4d6d;
+    --sketch:#c3b2ff;
+    --font-serif: Georgia, "Iowan Old Style", "Palatino Linotype", Palatino, serif;
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 700px at 50% -10%, #1a1130 0%, transparent 60%),
+      radial-gradient(900px 900px at 90% 110%, #160b24 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:var(--font-sans);
+    -webkit-font-smoothing:antialiased;
+    display:flex;
+    justify-content:center;
+    padding:clamp(12px,3vw,40px);
+  }
+
+  .game{
+    width:min(980px,100%);
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+  }
+
+  /* ---------- HUD ---------- */
+  .hud{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
+    flex-wrap:wrap;
+  }
+  .title-block{display:flex;flex-direction:column;gap:3px;min-width:0}
+  .kicker{
+    font-family:var(--font-mono);
+    font-size:11px;
+    letter-spacing:.32em;
+    text-transform:uppercase;
+    color:var(--faint);
+  }
+  .title{
+    font-family:var(--font-serif);
+    font-size:clamp(20px,3vw,27px);
+    font-weight:600;
+    letter-spacing:.01em;
+    line-height:1;
+    background:linear-gradient(90deg,#f0e7ff,#c98bff);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+
+  .boss{min-width:230px;flex:1;max-width:380px}
+  .boss-top{
+    display:flex;justify-content:space-between;align-items:baseline;
+    font-family:var(--font-mono);font-size:11px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--muted);margin-bottom:6px;
+  }
+  .boss-top .pct{color:var(--serpent);font-variant-numeric:tabular-nums}
+  .bar{
+    height:9px;border-radius:6px;background:#241834;
+    border:1px solid var(--line);overflow:hidden;position:relative;
+  }
+  .bar-fill{
+    height:100%;width:100%;
+    background:linear-gradient(90deg,var(--serpent-deep),var(--serpent));
+    box-shadow:0 0 14px rgba(193,91,255,.6);
+    transition:width .7s cubic-bezier(.4,0,.2,1), background .5s;
+    transform-origin:left;
+  }
+  .bar-fill.hit{background:linear-gradient(90deg,#ff3d6a,#ff7aa0)}
+
+  /* ---------- STAGE / SKETCH ---------- */
+  .stage{
+    position:relative;
+    border:1px solid var(--line);
+    border-radius:16px;
+    overflow:hidden;
+    background:
+      radial-gradient(120% 90% at 50% 0%, #1a1030 0%, #0c0715 70%);
+    box-shadow:inset 0 0 90px rgba(0,0,0,.6), 0 18px 50px -24px rgba(120,40,220,.5);
+  }
+  .stage::after{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(70% 55% at 50% 45%, transparent 55%, rgba(8,4,16,.75) 100%);
+  }
+  .stage-glow{
+    position:absolute;inset:0;pointer-events:none;z-index:0;
+    background:radial-gradient(45% 40% at 50% 55%, rgba(160,70,255,.16), transparent 70%);
+    animation:breathe 7s ease-in-out infinite;
+  }
+  @keyframes breathe{0%,100%{opacity:.55}50%{opacity:1}}
+  .stage svg{display:block;width:100%;height:auto;position:relative;z-index:1}
+  .scene-swap{animation:sceneIn .6s ease both}
+  @keyframes sceneIn{from{opacity:0;transform:scale(1.015)}to{opacity:1;transform:none}}
+
+  .phase-tag{
+    position:absolute;top:12px;left:14px;z-index:2;
+    font-family:var(--font-mono);font-size:10.5px;letter-spacing:.22em;
+    text-transform:uppercase;color:var(--sketch);
+    background:rgba(12,7,20,.66);border:1px solid var(--line);
+    padding:5px 10px;border-radius:20px;backdrop-filter:blur(3px);
+  }
+
+  /* ---------- DIALOGUE ---------- */
+  .dialogue{
+    background:linear-gradient(180deg,var(--panel2),var(--panel));
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:22px clamp(18px,3vw,30px) 24px;
+    min-height:150px;
+    position:relative;
+  }
+  .reveal{animation:rev .45s ease both}
+  @keyframes rev{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+  .speaker{
+    display:inline-flex;align-items:center;gap:9px;
+    font-family:var(--font-mono);font-size:12px;letter-spacing:.2em;
+    text-transform:uppercase;margin-bottom:12px;font-weight:600;
+  }
+  .speaker .dot{width:8px;height:8px;border-radius:50%;box-shadow:0 0 10px currentColor}
+  .sp-MAX{color:var(--max)}
+  .sp-BARUCH{color:var(--baruch)}
+  .sp-SERPENT{color:var(--serpent)}
+  .sp-NARRATION{color:var(--faint)}
+  .paren{color:var(--muted);font-style:italic;font-weight:400;letter-spacing:.02em;text-transform:none;font-family:var(--font-sans)}
+
+  .line{
+    font-size:clamp(18px,2.6vw,23px);
+    line-height:1.5;
+    text-wrap:pretty;
+    max-width:60ch;
+  }
+  .line.narration{
+    font-family:var(--font-serif);
+    font-style:italic;
+    color:#cabfe0;
+    font-size:clamp(17px,2.4vw,21px);
+  }
+  .line.speech{font-weight:450}
+
+  /* system / gameplay callout */
+  .gameplay{
+    margin-top:18px;
+    display:flex;gap:11px;align-items:flex-start;
+    font-family:var(--font-mono);font-size:12.5px;line-height:1.45;
+    color:#e4d3ff;
+    background:rgba(120,60,220,.09);
+    border:1px solid rgba(150,90,240,.32);
+    border-left:3px solid var(--serpent);
+    border-radius:9px;
+    padding:11px 14px;
+    animation:rev .5s .1s ease both;
+  }
+  .gameplay .syslabel{color:var(--serpent);letter-spacing:.14em;text-transform:uppercase;white-space:nowrap}
+  .gameplay.weak{background:rgba(60,240,150,.08);border-color:rgba(90,240,160,.34);border-left-color:var(--weak)}
+  .gameplay.weak .syslabel{color:var(--weak)}
+  .gameplay.fire{background:rgba(255,140,70,.09);border-color:rgba(255,150,80,.34);border-left-color:var(--ember)}
+  .gameplay.fire .syslabel{color:var(--ember)}
+
+  /* ---------- ACTIONS ---------- */
+  .actions{display:flex;flex-direction:column;gap:11px;margin-top:22px}
+  .prompt-row{display:flex;justify-content:flex-end}
+
+  button{font-family:inherit;color:inherit;cursor:pointer}
+
+  .continue{
+    align-self:flex-end;
+    font-family:var(--font-mono);font-size:13px;letter-spacing:.1em;
+    text-transform:uppercase;
+    background:transparent;border:1px solid var(--line);
+    color:var(--muted);
+    padding:10px 18px;border-radius:24px;
+    display:inline-flex;align-items:center;gap:9px;
+    transition:.18s;
+  }
+  .continue:hover{border-color:var(--serpent);color:var(--ink);background:rgba(120,60,220,.12)}
+  .continue .arw{transition:transform .18s}
+  .continue:hover .arw{transform:translateX(3px)}
+  .continue .kbd{opacity:.5;font-size:10px;border:1px solid currentColor;border-radius:4px;padding:1px 5px}
+
+  .choice{
+    text-align:left;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:15px 17px;
+    display:flex;align-items:center;gap:14px;
+    transition:.16s;
+    position:relative;
+  }
+  .choice:hover{border-color:var(--hoc,var(--serpent));background:var(--panel2);transform:translateX(3px)}
+  .choice .num{
+    font-family:var(--font-mono);font-size:11px;color:var(--faint);
+    border:1px solid var(--line);border-radius:6px;width:22px;height:22px;
+    display:grid;place-items:center;flex:none;
+  }
+  .choice .ctext{font-size:16px;line-height:1.35}
+  .choice .tone{
+    font-family:var(--font-mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+    margin-right:2px;font-weight:700;
+  }
+  .tone-Empathetic{--hoc:var(--baruch);color:var(--baruch)}
+  .tone-Neutral{--hoc:var(--max);color:var(--max)}
+  .tone-Bold{--hoc:var(--danger);color:var(--danger)}
+  .choice.has-tone .ctext{display:block;margin-top:3px;color:var(--ink)}
+  .choice.has-tone{flex-direction:row}
+  .choice.has-tone .body{display:flex;flex-direction:column;gap:1px}
+
+  :focus-visible{outline:2px solid var(--max);outline-offset:2px}
+
+  /* ---------- FOOTER ---------- */
+  .footer{
+    display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
+    padding-top:2px;
+  }
+  .stances{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-family:var(--font-mono);font-size:11px}
+  .stances .lbl{color:var(--faint);letter-spacing:.16em;text-transform:uppercase}
+  .stance-chip{
+    padding:3px 10px;border-radius:20px;border:1px solid currentColor;
+    letter-spacing:.08em;text-transform:uppercase;font-size:10.5px;
+  }
+  .restart{
+    font-family:var(--font-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+    background:none;border:none;color:var(--faint);padding:4px 2px;
+  }
+  .restart:hover{color:var(--ink)}
+
+  /* ---------- END CARD ---------- */
+  .endcard{text-align:center;padding:8px 4px 6px}
+  .endcard .smash{
+    font-family:var(--font-serif);font-size:clamp(26px,5vw,44px);font-weight:600;
+    letter-spacing:.02em;margin:0 0 6px;
+    background:linear-gradient(90deg,#fff,#b98bff);-webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .endcard .sub{color:var(--muted);font-family:var(--font-serif);font-style:italic;font-size:17px;max-width:52ch;margin:0 auto 26px;line-height:1.5}
+  .verdict{
+    display:inline-flex;flex-direction:column;gap:14px;align-items:center;
+    background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    padding:24px 30px;margin-bottom:22px;min-width:min(420px,90%);
+  }
+  .verdict .vlabel{font-family:var(--font-mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint)}
+  .verdict .attitude{font-family:var(--font-serif);font-size:30px;font-weight:600}
+  .verdict .vrow{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  .unlocks{list-style:none;padding:0;margin:0 0 26px;display:flex;flex-direction:column;gap:8px;max-width:440px;margin-left:auto;margin-right:auto}
+  .unlocks li{
+    font-family:var(--font-mono);font-size:12.5px;text-align:left;
+    display:flex;gap:10px;align-items:center;color:var(--muted);
+    border:1px dashed var(--line);border-radius:8px;padding:9px 13px;
+  }
+  .unlocks li.on{color:var(--ink);border-style:solid}
+  .unlocks li .mk{color:var(--weak)}
+  .unlocks li.off .mk{color:var(--faint)}
+  .replay{
+    font-family:var(--font-mono);font-size:13px;letter-spacing:.12em;text-transform:uppercase;
+    background:linear-gradient(90deg,var(--serpent-deep),var(--serpent));
+    border:none;color:#fff;padding:13px 30px;border-radius:26px;
+    box-shadow:0 10px 30px -10px rgba(180,70,255,.7);
+    transition:.18s;
+  }
+  .replay:hover{transform:translateY(-2px);box-shadow:0 14px 34px -8px rgba(180,70,255,.8)}
+
+  .note{margin-top:14px;font-family:var(--font-mono);font-size:10.5px;color:var(--faint);text-align:center;letter-spacing:.04em}
+
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important}
+    .bar-fill{transition:width .2s linear}
+    .continue .arw{transition:none}
+  }
+  @media (max-width:560px){
+    .line{font-size:19px}
+    .boss{max-width:100%;order:3;width:100%}
+    .hud{gap:12px}
+  }
+</style>
+</head>
+<body>
+
+<div class="game">
+  <div class="hud">
+    <div class="title-block">
+      <div class="kicker">Boss Battle · Interactive Script</div>
+      <div class="title">The Serpent</div>
+    </div>
+    <div class="boss">
+      <div class="boss-top"><span id="bossName">Corruption</span><span class="pct" id="bossPct">100%</span></div>
+      <div class="bar"><div class="bar-fill" id="bossFill"></div></div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="stage-glow"></div>
+    <div class="phase-tag" id="phaseTag">Intro</div>
+    <div id="sketch"></div>
+  </div>
+
+  <div class="dialogue">
+    <div id="scene"></div>
+    <div class="actions" id="actions"></div>
+  </div>
+
+  <div class="footer">
+    <div class="stances"><span class="lbl">Stance</span><span id="stanceChips"></span></div>
+    <button class="restart" id="restartBtn" hidden>↺ Restart</button>
+  </div>
+</div>
+
+<script>
+/* ============ STORYBOARD SKETCHES (blueprint / concept-art style) ============ */
+const NS = "http://www.w3.org/2000/svg";
+function frame(tag, inner){
+  return `<svg viewBox="0 0 880 480" role="img" aria-label="${tag}">
+    <defs>
+      <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+        <path d="M40 0H0V40" fill="none" stroke="#2a2140" stroke-width="1" opacity=".5"/>
+      </pattern>
+      <radialGradient id="wellGlow" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#c15bff" stop-opacity=".55"/>
+        <stop offset="100%" stop-color="#c15bff" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <rect width="880" height="480" fill="url(#grid)"/>
+    <g stroke="#7a6aa8" stroke-width="2" fill="none" opacity=".8">
+      <path d="M20 20h34M20 20v34"/><path d="M860 20h-34M860 20v34"/>
+      <path d="M20 460h34M20 460v-34"/><path d="M860 460h-34M860 460v-34"/>
+    </g>
+    <text x="34" y="42" font-family="ui-monospace,Menlo,monospace" font-size="12" letter-spacing="3" fill="#c3b2ff" opacity=".85">${tag}</text>
+    ${inner}
+  </svg>`;
+}
+const L = '#c3b2ff';       // main sketch line
+const L2 = '#8a7bc0';      // secondary
+const A = '#efe6ff';       // annotation
+function annot(x,y,text,anchor="start"){
+  return `<text x="${x}" y="${y}" font-family="ui-monospace,Menlo,monospace" font-size="12.5" letter-spacing="1.5" fill="${A}" opacity=".85" text-anchor="${anchor}">${text}</text>`;
+}
+function lead(x1,y1,x2,y2){return `<path d="M${x1} ${y1}L${x2} ${y2}" stroke="${A}" stroke-width="1.2" stroke-dasharray="4 4" opacity=".6"/><circle cx="${x1}" cy="${y1}" r="2.5" fill="${A}" opacity=".8"/>`;}
+
+// Reusable actors
+function well(cx,cy,glow){
+  return `<g>
+    ${glow?`<ellipse cx="${cx}" cy="${cy-6}" rx="120" ry="46" fill="url(#wellGlow)"/>`:''}
+    <ellipse cx="${cx}" cy="${cy}" rx="96" ry="34" stroke="${L}" stroke-width="2.5" fill="#140a24"/>
+    <ellipse cx="${cx}" cy="${cy}" rx="70" ry="24" stroke="${L2}" stroke-width="1.8" fill="none"/>
+    <ellipse cx="${cx}" cy="${cy}" rx="44" ry="15" stroke="${L2}" stroke-width="1.5" fill="none" opacity=".7"/>
+    <path d="M${cx-96} ${cy}v42M${cx+96} ${cy}v42M${cx-96} ${cy+42} a96 30 0 0 0 192 0" stroke="${L}" stroke-width="2.5" fill="none"/>
+  </g>`;
+}
+function baruchCaged(cx,cy){
+  return `<g>
+    <path d="M${cx} 60v34" stroke="${L2}" stroke-width="1.5" stroke-dasharray="3 5"/>
+    <rect x="${cx-34}" y="94" width="68" height="82" rx="8" stroke="${L}" stroke-width="2.5" fill="#160c26"/>
+    <path d="M${cx-16} 94v82M${cx} 94v82M${cx+16} 94v82" stroke="${L2}" stroke-width="1.5"/>
+    <circle cx="${cx}" cy="122" r="10" stroke="${A}" stroke-width="1.6" fill="none"/>
+    <path d="M${cx} 132v26M${cx-11} 142h22M${cx} 158l-9 14M${cx} 158l9 14" stroke="${A}" stroke-width="1.6" fill="none"/>
+  </g>`;
+}
+function serpent(pts,head){
+  // pts: path string; head at end
+  return `<g stroke="${L}" stroke-width="3" fill="none" stroke-linecap="round">
+    <path d="${pts}"/>
+  </g>${head}`;
+}
+function serpentHead(cx,cy,angry,weak){
+  return `<g>
+    <path d="M${cx-26} ${cy} q-14 -20 8 -30 q26 -12 40 8 q10 14 -2 26 q-20 16 -46 -4z" stroke="${L}" stroke-width="3" fill="#170c28"/>
+    <circle cx="${cx+14}" cy="${cy-10}" r="4" fill="${angry?'#ff5a7a':L}"/>
+    <path d="M${cx+30} ${cy} l20 -5 m-20 5 l20 5" stroke="${angry?'#ff5a7a':L}" stroke-width="2" fill="none"/>
+    ${weak?`<circle cx="${cx-30}" cy="${cy+16}" r="13" fill="#63f0a8" opacity=".25"/><circle cx="${cx-30}" cy="${cy+16}" r="7" fill="#63f0a8"/>`:''}
+  </g>`;
+}
+function maxFig(cx,cy,scale=1){
+  return `<g transform="translate(${cx} ${cy}) scale(${scale})" stroke="${A}" stroke-width="2.2" fill="none" stroke-linecap="round">
+    <circle cx="0" cy="-40" r="9"/>
+    <path d="M0 -31v30M0 -22l-16 12M0 -22l16 8M0 -1l-11 26M0 -1l12 24"/>
+  </g>`;
+}
+
+const SCENES = {
+  arena: frame("SCENE · THE ARENA", `
+    ${well(440,372,true)}
+    ${baruchCaged(440)}
+    <!-- broken banners -->
+    <path d="M120 120l6 150 22 -10 -4 -150z" stroke="${L2}" stroke-width="2" fill="none"/>
+    <path d="M126 138l16 -3M128 168l16 -3M130 198l14 -2" stroke="${L2}" stroke-width="1.4"/>
+    <path d="M770 110l-8 150 -22 -12 6 -146z" stroke="${L2}" stroke-width="2" fill="none"/>
+    <!-- burning wall fragments -->
+    <path d="M40 360q10 -30 0 -60q18 24 30 4q4 30 -8 60z" stroke="#ff9a5a" stroke-width="1.6" fill="none" opacity=".7"/>
+    <!-- serpent coiled foreground -->
+    ${serpent("M150 430 C300 400 250 330 400 350 C560 372 520 300 640 320 C720 333 726 380 690 410", serpentHead(690,410,false,false))}
+    ${maxFig(250,420,1.05)}
+    ${lead(250,392,196,300)}${annot(196,294,"MAX")}
+    ${lead(440,120,300,150)}${annot(300,144,"BARUCH · caged",'end')}
+    ${lead(440,352,600,250)}${annot(600,244,"THE WELL")}
+    ${lead(650,400,742,352)}${annot(742,346,"SERPENT")}
+  `),
+
+  damage: frame("BEAT · IMPACT", `
+    <!-- shattered pillar -->
+    <path d="M560 120l70 0 -6 240 -58 0z" stroke="${L2}" stroke-width="2" fill="none"/>
+    <path d="M566 250l64 -8M566 300l64 6" stroke="#ff5a7a" stroke-width="2"/>
+    <g stroke="#ff5a7a" stroke-width="2" opacity=".9">
+      <path d="M640 200l50 -20M660 240l60 4M646 280l52 30"/>
+    </g>
+    <!-- serpent lunging into it -->
+    ${serpent("M120 260 C260 240 300 300 440 270 C540 248 560 210 610 220", serpentHead(610,220,true,false))}
+    <!-- impact burst -->
+    <g stroke="#ff5a7a" stroke-width="2.5" fill="none">
+      <path d="M600 210l-18 -22M624 214l6 -26M596 236l-24 -6"/>
+    </g>
+    ${maxFig(230,400,1)}
+    <path d="M250 380q60 -30 120 -20" stroke="${A}" stroke-width="1.6" fill="none" stroke-dasharray="5 5"/>
+    ${lead(250,368,196,290)}${annot(196,284,"MAX dodges")}
+    ${lead(614,206,700,150)}${annot(700,144,"CRASH → damage")}
+    ${annot(560,410,"health bar drops")}
+  `),
+
+  weak: frame("BEAT · WEAK POINT", `
+    ${serpent("M120 400 C260 360 220 250 380 250 C520 250 500 160 620 190", serpentHead(620,190,false,true))}
+    <g>
+      <circle cx="590" cy="206" r="34" stroke="#63f0a8" stroke-width="1.6" fill="none" stroke-dasharray="4 5" opacity=".8"/>
+      <path d="M590 206m-46 0h-30M590 206m46 0h30M590 206m0 -46v-30" stroke="#63f0a8" stroke-width="1.4" opacity=".6"/>
+    </g>
+    ${maxFig(220,420,1)}
+    ${lead(590,206,470,120)}${annot(470,114,"WEAK POINT · behind the neck",'start')}
+    ${annot(120,450,"“You're protecting something.”")}
+  `),
+
+  arenachange: frame("BEAT · THE WELL PULSES", `
+    ${well(440,360,true)}
+    <!-- pulse rings from the well -->
+    <g stroke="${L}" fill="none" opacity=".55">
+      <ellipse cx="440" cy="356" rx="150" ry="52" stroke-width="1.6"/>
+      <ellipse cx="440" cy="356" rx="210" ry="74" stroke-width="1.3" opacity=".6"/>
+      <ellipse cx="440" cy="356" rx="270" ry="96" stroke-width="1" opacity=".4"/>
+    </g>
+    <!-- cry waveform -->
+    <path d="M120 110 q20 -30 40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0"
+      stroke="#5fd3ff" stroke-width="2" fill="none" opacity=".7"/>
+    <!-- fracturing arena -->
+    <path d="M60 300l120 40M820 280l-130 50M40 200l80 -30" stroke="${L2}" stroke-width="1.4" stroke-dasharray="6 6" opacity=".7"/>
+    ${lead(200,110,320,80)}${annot(320,74,"THE GIRL'S CRY — loops")}
+    ${lead(440,300,610,220)}${annot(610,214,"WELL pulses with each cry")}
+    ${annot(60,450,"arena buckles + reshapes")}
+  `),
+
+  flame: frame("BEAT · FLAME GEYSERS", `
+    ${well(440,372,false)}
+    <!-- purple flame geysers -->
+    ${[170,330,560,720].map((x,i)=>`
+      <g>
+        <path d="M${x} 400 q-22 -60 0 -110 q14 40 22 10 q10 46 -6 100z" fill="none" stroke="#c76bff" stroke-width="2.4"/>
+        <path d="M${x} 400 q-10 -40 2 -70 q8 26 12 6 q6 30 -4 64z" fill="none" stroke="#ff9a5a" stroke-width="1.8"/>
+        <path d="M${x-30} 402h60" stroke="${L2}" stroke-width="1.6"/>
+      </g>`).join('')}
+    <!-- serpent recoiling up -->
+    ${serpent("M170 300 C300 250 320 200 460 210 C600 220 620 160 700 150", serpentHead(700,150,true,false))}
+    ${lead(330,300,300,120)}${annot(300,114,"FLAME GEYSER")}
+    ${annot(60,450,"ignite projectiles → heavy damage")}
+    ${lead(560,300,650,360)}${annot(650,366,"sacred fire")}
+  `),
+
+  death: frame("BEAT · SMASH TO BLACK", `
+    <!-- dissolving serpent into particles -->
+    ${serpent("M150 380 C280 360 260 300 380 310 C470 318 480 300 520 296", serpentHead(520,296,false,false))}
+    <g fill="${L}">
+      ${Array.from({length:60}).map((_,i)=>{
+        const x=520+ (i*37%360); const y=120+ ((i*53)%230); const r=(i%4)*0.6+0.6; const o=0.15+ (i%5)*0.14;
+        return `<circle cx="${x}" cy="${y}" r="${r}" opacity="${o.toFixed(2)}"/>`;}).join('')}
+    </g>
+    <path d="M520 296 C620 260 700 200 800 150" stroke="${L2}" stroke-width="1.4" stroke-dasharray="3 7" fill="none" opacity=".6"/>
+    ${maxFig(230,400,1.05)}
+    ${lead(700,180,720,110)}${annot(720,104,"dematerializes",'end')}
+    ${annot(60,450,"particles fill frame → cut to black")}
+  `),
+};
+
+/* ============ DIALOGUE GRAPH ============ */
+const P1="Phase One", P2="Phase Two", TR="Phase One → Two", FIN="Final Blow", INTRO="Intro";
+
+const NODES = {
+  /* ---- INTRO ---- */
+  start:{sp:"NARRATION",phase:INTRO,sketch:"arena",health:100,
+    text:"Max awakens in a twisted arena built around an enormous Well — a corrupted reflection of every place he has passed through. Broken Zealot banners. Burning village walls. Fragments of Baruch's home. And beneath it all, the Girl's cry.",next:"b1"},
+  b1:{sp:"BARUCH",text:"Max? Go! It's coming!",next:"m1"},
+  m1:{sp:"MAX",text:"I'm here to help you.",next:"s0"},
+  s0:{sp:"SERPENT",paren:"slithering between them",text:"Listen to him. You've seen what crawls beneath his prayers.",next:"b2"},
+  b2:{sp:"BARUCH",text:"It's true. I'm not worth helping.",next:"c1"},
+  c1:{sp:"NARRATION",text:"Max rises to face it.",choices:[
+    {tone:"Empathetic",label:"You don't get to judge him.",next:"emp1"},
+    {tone:"Neutral",label:"Why are you doing this?",next:"neu1"},
+    {tone:"Bold",label:"Come on. If you're going to kill me… do it!",next:"bold1"},
+  ]},
+
+  emp1:{sp:"MAX",text:"You don't get to judge him.",next:"emp2"},
+  emp2:{sp:"SERPENT",paren:"its attention never leaving Baruch",text:"I judge nothing. I simply remind him… of what he already knows.",choices:[
+    {label:"Leave him alone.",next:"empA"},
+    {label:"You're afraid he'll stop believing you.",next:"empB"},
+  ]},
+  empA:{sp:"MAX",text:"Leave him alone.",next:"empA2"},
+  empA2:{sp:"SERPENT",text:"Why? He belongs to me.",next:"p1_0"},
+  empB:{sp:"MAX",text:"You're afraid he'll stop believing you.",next:"empB2"},
+  empB2:{sp:"SERPENT",text:"I'm afraid of nothing!",next:"empB3"},
+  empB3:{sp:"NARRATION",sketch:"damage",health:84,flag:"pillar",
+    gameplay:{k:"Damage",text:"Boss takes significant damage — health bar drops."},
+    text:"The Serpent lunges. Max dodges — and it crashes through a stone pillar.",next:"p1_0"},
+
+  neu1:{sp:"MAX",text:"Why are you doing this?",next:"neu2"},
+  neu2:{sp:"SERPENT",paren:"as it circles, it instinctively shields the back of its neck — Max notices",text:"Because memory cannot lie.",choices:[
+    {label:"What are you hiding?",next:"neuA"},
+    {label:"You're protecting something.",next:"neuB"},
+  ]},
+  neuA:{sp:"MAX",text:"What are you hiding?",next:"neuA2"},
+  neuA2:{sp:"SERPENT",text:"That's rich coming from you.",next:"p1_0"},
+  neuB:{sp:"MAX",text:"You're protecting something.",next:"neuB2"},
+  neuB2:{sp:"NARRATION",sketch:"weak",flag:"weak",
+    gameplay:{k:"Hint",cls:"weak",text:"A weak point is revealed behind the Boss's head."},
+    text:"The Serpent twists uneasily. A glowing weak point flashes behind its neck.",next:"neuB3"},
+  neuB3:{sp:"SERPENT",text:"You're stalling.",next:"p1_0"},
+
+  bold1:{sp:"MAX",text:"Come on. If you're going to kill me — do it!",next:"bold2"},
+  bold2:{sp:"SERPENT",paren:"lunging directly into combat",text:"Gladly. That's the plan.",
+    gameplay:{k:"Combat",text:"Boss fight begins immediately."},next:"p1_0"},
+
+  /* ---- PHASE ONE ---- */
+  p1_0:{sp:"NARRATION",phase:P1,health:70,text:"The Serpent strikes — and with every blow it tries to define Baruch by his righteous fury.",next:"p1_1"},
+  p1_1:{sp:"SERPENT",text:"You called it justice.",next:"p1_2"},
+  p1_2:{sp:"SERPENT",text:"You called it righteousness.",next:"p1_3"},
+  p1_3:{sp:"SERPENT",health:62,text:"You called it liberation.",next:"p1_4"},
+  p1_4:{sp:"SERPENT",text:"You are the monster that cast her into the dark.",next:"p1_5"},
+  p1_5:{sp:"BARUCH",text:"I know.",next:"p1_6"},
+  p1_6:{sp:"SERPENT",health:55,text:"Then rot in your guilt.",next:"p1_7"},
+  p1_7:{sp:"MAX",text:"Leave him alone!",next:"tr0"},
+
+  /* ---- TRANSITION ---- */
+  tr0:{sp:"NARRATION",phase:TR,sketch:"arenachange",text:"The Girl's cry loops through the space. The Well pulses with every cry. The arena buckles and reshapes around them.",next:"tr1"},
+  tr1:{sp:"SERPENT",text:"One guilty man protecting another.",next:"tr2"},
+  tr2:{sp:"MAX",text:"What? You don't know about me.",next:"tr3"},
+  tr3:{sp:"SERPENT",text:"I know about your friend. I know you turned your back on her. You left her in the shadows.",next:"c2"},
+  c2:{sp:"NARRATION",text:"The words land. Max steadies himself.",choices:[
+    {tone:"Empathetic",label:"I was afraid.",next:"tEmp1"},
+    {tone:"Neutral",label:"You're twisting what happened.",next:"tNeu1"},
+    {tone:"Bold",label:"Shut your mouth!",next:"tBold1"},
+  ]},
+
+  tEmp1:{sp:"MAX",text:"I was afraid.",next:"tEmp2"},
+  tEmp2:{sp:"SERPENT",paren:"slowly circling Max",text:"Yes… you were.",choices:[
+    {label:"I know… I should've been stronger.",next:"tEmpA"},
+    {label:"I panicked. There was nothing I could do.",next:"tEmpB"},
+  ]},
+  tEmpA:{sp:"MAX",text:"I know… I should've been stronger.",next:"tEmpA2"},
+  tEmpA2:{sp:"SERPENT",text:"Knowing it changes nothing.",next:"tEmpA3"},
+  tEmpA3:{sp:"BARUCH",paren:"calling out",text:"No… but it's a start.",next:"tEmpA4"},
+  tEmpA4:{sp:"NARRATION",sketch:"flame",flag:"geyser",
+    gameplay:{k:"Unlock",cls:"fire",text:"Flame Geysers active — ignite projectiles in the sacred fire to deal heavy damage."},
+    text:"As if tied to Baruch's rising spirit, purple fire erupts from cracks in the ground. The Serpent recoils as the flames spread.",next:"p2_0"},
+  tEmpB:{sp:"MAX",text:"I panicked. There was nothing I could do.",next:"tEmpB2"},
+  tEmpB2:{sp:"SERPENT",paren:"laughs",text:"Where have I heard that before?",next:"p2_0"},
+
+  tNeu1:{sp:"MAX",text:"You're twisting what happened.",next:"tNeu2"},
+  tNeu2:{sp:"SERPENT",paren:"slowly circling Max",text:"That's what I'm made for.",choices:[
+    {label:"Then you're just a liar.",next:"tNeuA"},
+    {label:"You only tell part of the story.",next:"tNeuB"},
+  ]},
+  tNeuA:{sp:"MAX",text:"Then you're just a liar.",next:"tNeuA2"},
+  tNeuA2:{sp:"SERPENT",paren:"hissing, tearing at the arena",text:"And you're not?",next:"p2_0"},
+  tNeuB:{sp:"MAX",text:"You only tell part of the story.",next:"tNeuB2"},
+  tNeuB2:{sp:"SERPENT",paren:"laughs, then hisses, enraged, tearing at the arena",text:"The only part that matters.",next:"p2_0"},
+
+  tBold1:{sp:"MAX",text:"Shut your mouth!",next:"tBold2"},
+  tBold2:{sp:"SERPENT",paren:"laughs",text:"Baruch, is this feeble little brat the best you've got?",next:"tBold3"},
+  tBold3:{sp:"BARUCH",text:"Watch your back, Max.",next:"tBold4"},
+  tBold4:{sp:"NARRATION",text:"The Serpent roars and lunges back into action — more aggressive than before.",next:"p2_0"},
+
+  /* ---- PHASE TWO ---- */
+  p2_0:{sp:"NARRATION",phase:P2,health:40,text:"The assault turns feverish. And as it strikes, the Serpent stops saying “I.” It begins to speak of “us.” Of “we.”",next:"p2_1"},
+  p2_1:{sp:"SERPENT",text:"He stays here.",next:"p2_2"},
+  p2_2:{sp:"SERPENT",text:"We are your truth.",next:"p2_3"},
+  p2_3:{sp:"SERPENT",health:30,text:"No one is taking him from us.",next:"p2_4"},
+  p2_4:{sp:"SERPENT",text:"We are your history.",next:"p2_5"},
+  p2_5:{sp:"SERPENT",text:"His future belongs to us.",next:"p2_6"},
+  p2_6:{sp:"SERPENT",health:20,text:"We are your future.",next:"fin0"},
+
+  /* ---- FINAL ---- */
+  fin0:{sp:"NARRATION",phase:FIN,health:10,text:"After enough damage, the Serpent collapses. It writhes on the ground, barely able to lift its head.",next:"fin1"},
+  fin1:{sp:"SERPENT",paren:"weak",text:"Say her name… Prove you're no different.",next:"c3"},
+  c3:{sp:"NARRATION",text:"There is no strength left in it. The final word is yours.",choices:[
+    {tone:"Empathetic",label:"This thing can't hold you anymore, Baruch.",next:"finEnd"},
+    {tone:"Neutral",label:"Let him go.",next:"finEnd"},
+    {tone:"Bold",label:"Your lies end here!",next:"finEnd"},
+  ]},
+  finEnd:{sp:"NARRATION",sketch:"death",health:0,
+    gameplay:{k:"Recorded",text:"Your final attitude is recorded — it may shape what comes next."},
+    text:"There is no comeback from the Serpent. Max delivers the final blow. It dematerializes into a storm of particles that fill the frame — and we SMASH TO BLACK.",end:true},
+};
+
+/* ============ ENGINE ============ */
+const $ = s=>document.querySelector(s);
+const sketchEl=$("#sketch"), sceneEl=$("#scene"), actionsEl=$("#actions"),
+      phaseTag=$("#phaseTag"), fill=$("#bossFill"), pct=$("#bossPct"),
+      stanceChips=$("#stanceChips"), restartBtn=$("#restartBtn");
+
+let state, curChoices=[], curContinue=null;
+
+function reset(){
+  state={id:"start",health:100,sketch:"arena",phase:INTRO,stances:[],flags:new Set()};
+  restartBtn.hidden=true;
+  stanceChips.innerHTML="";
+  render();
+}
+
+function setHealth(h){
+  state.health=h;
+  fill.style.width=h+"%";
+  pct.textContent=h+"%";
+  fill.classList.remove("hit");
+  void fill.offsetWidth;
+  fill.classList.add("hit");
+  setTimeout(()=>fill.classList.remove("hit"),450);
+}
+
+function renderStances(){
+  stanceChips.innerHTML = state.stances.map(t=>
+    `<span class="stance-chip tone-${t}">${t}</span>`).join('') || '<span style="color:var(--faint)">—</span>';
+}
+
+function go(id){
+  const n=NODES[id];
+  state.id=id;
+  if(n.flag) state.flags.add(n.flag);
+  if(typeof n.health==="number") setHealth(n.health);
+  if(n.phase){state.phase=n.phase;}
+  if(n.sketch && n.sketch!==state.sketch){
+    state.sketch=n.sketch;
+  }
+  render(n.sketch?true:false);
+}
+
+function render(swap){
+  const n=NODES[state.id];
+  phaseTag.textContent=state.phase;
+
+  // stage
+  if(swap || !sketchEl.firstChild){
+    sketchEl.innerHTML=SCENES[state.sketch];
+    const svg=sketchEl.firstElementChild;
+    if(svg){svg.classList.remove("scene-swap");void svg.offsetWidth;svg.classList.add("scene-swap");}
+  }
+
+  // dialogue
+  const sp=n.sp;
+  const parenHtml=n.paren?` <span class="paren">(${n.paren})</span>`:"";
+  const speakerHtml = sp==="NARRATION"
+    ? `<div class="speaker sp-NARRATION"><span class="dot"></span>Stage Direction</div>`
+    : `<div class="speaker sp-${sp}"><span class="dot"></span>${sp}${parenHtml}</div>`;
+  const lineCls = sp==="NARRATION"?"line narration":"line speech";
+  let html=`<div class="reveal">${speakerHtml}<div class="${lineCls}">${n.text}</div>`;
+  if(n.gameplay){
+    const g=n.gameplay;
+    html+=`<div class="gameplay ${g.cls||''}"><span class="syslabel">▸ ${g.k}</span><span>${g.text}</span></div>`;
+  }
+  html+=`</div>`;
+  sceneEl.innerHTML=html;
+
+  // actions
+  buildActions(n);
+  renderStances();
+}
+
+function buildActions(n){
+  actionsEl.innerHTML="";
+  curChoices=[]; curContinue=null;
+
+  if(n.end){
+    showEnd();
+    return;
+  }
+  if(n.choices){
+    n.choices.forEach((c,i)=>{
+      const hasTone=!!c.tone;
+      const b=document.createElement("button");
+      b.className="choice"+(hasTone?` has-tone tone-${c.tone}`:"");
+      b.innerHTML = hasTone
+        ? `<span class="num">${i+1}</span><span class="body"><span class="tone">${c.tone}</span><span class="ctext">${c.label}</span></span>`
+        : `<span class="num">${String.fromCharCode(65+i)}</span><span class="ctext">${c.label}</span>`;
+      b.onclick=()=>{ if(c.tone) state.stances.push(c.tone); go(c.next); };
+      actionsEl.appendChild(b);
+      curChoices.push(b);
+    });
+  } else if(n.next){
+    const wrap=document.createElement("div");
+    wrap.className="prompt-row";
+    const b=document.createElement("button");
+    b.className="continue";
+    b.innerHTML=`Continue <span class="arw">▸</span><span class="kbd">Space</span>`;
+    b.onclick=()=>go(n.next);
+    wrap.appendChild(b);
+    actionsEl.appendChild(wrap);
+    curContinue=b;
+  }
+  restartBtn.hidden = state.id==="start";
+}
+
+function attitudeVerdict(stances){
+  const c={Empathetic:0,Neutral:0,Bold:0};
+  stances.forEach(t=>c[t]++);
+  const max=Math.max(...Object.values(c));
+  const top=Object.keys(c).filter(k=>c[k]===max);
+  if(top.length>1) return {name:"Conflicted",desc:"You never settled into one voice — Max met the Serpent as a shifting thing."};
+  const map={
+    Empathetic:{name:"The Compassionate",desc:"Max answered cruelty with understanding. Baruch felt it."},
+    Neutral:{name:"The Interrogator",desc:"Max refused the Serpent's frame and kept picking at its story."},
+    Bold:{name:"The Defiant",desc:"Max met the Serpent head-on and never flinched."},
+  };
+  return map[top[0]];
+}
+
+function showEnd(){
+  const v=attitudeVerdict(state.stances);
+  const f=state.flags;
+  const unlocks=[
+    {on:f.has("pillar"),t:"Pillar Impact — heavy early damage on the Serpent"},
+    {on:f.has("weak"),t:"Weak Point — the mark behind its neck revealed"},
+    {on:f.has("geyser"),t:"Flame Geysers — sacred fire ignited across the arena"},
+  ];
+  actionsEl.innerHTML=`
+    <div class="endcard">
+      <h2 class="smash">Smash to Black</h2>
+      <p class="sub">The Serpent is gone. Somewhere, the game remembers how Max carried himself — and what waits in Baruch's home may answer for it.</p>
+      <div class="verdict">
+        <span class="vlabel">Final Attitude</span>
+        <span class="attitude">${v.name}</span>
+        <div class="vrow">${state.stances.map(t=>`<span class="stance-chip tone-${t}">${t}</span>`).join('')}</div>
+        <span style="color:var(--muted);max-width:38ch;font-family:var(--font-serif);font-style:italic;font-size:15px">${v.desc}</span>
+      </div>
+      <ul class="unlocks">
+        ${unlocks.map(u=>`<li class="${u.on?'on':'off'}"><span class="mk">${u.on?'◆':'◇'}</span>${u.t}</li>`).join('')}
+      </ul>
+      <button class="replay" id="replayBtn">↺ Run it again</button>
+      <div class="note">Next scene: back in Baruch's home for the final resolution — script coming soon.</div>
+    </div>`;
+  $("#replayBtn").onclick=reset;
+  restartBtn.hidden=true;
+}
+
+/* keyboard */
+document.addEventListener("keydown",e=>{
+  if(e.key==="r"||e.key==="R"){ if(!restartBtn.hidden||NODES[state.id].end) reset(); return;}
+  if((e.key===" "||e.key==="Enter") && curContinue){e.preventDefault();curContinue.click();return;}
+  if(curChoices.length){
+    const i=parseInt(e.key,10);
+    if(i>=1 && i<=curChoices.length){e.preventDefault();curChoices[i-1].click();}
+    const letter=e.key.toUpperCase().charCodeAt(0)-65;
+    if(letter>=0 && letter<curChoices.length && isNaN(i)){e.preventDefault();curChoices[letter].click();}
+  }
+});
+restartBtn.onclick=reset;
+
+reset();
+</script>
+
+</body>
+</html>
